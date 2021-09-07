@@ -5,25 +5,23 @@
 	P4 equ 0c0h; define P4 = 0c0h
 	
 ; load truth table (ethalon)
-; TODO: invert truth table
 
-	mov A, #00101101b; 0 - 7
+	mov A, #10110100b; 0 - 7
 	cpl A
 	mov DPTR, #8000h
 	movx @DPTR, A
 	
-	mov A, #0111000b; 8 - 15
+	mov A, #00001110b; 8 - 15
 	cpl A
 	mov DPTR, #8001h
 	movx @DPTR, A
 	
 ; indication
-	clr P4.0
+	clr  P4.0
 	setb P4.1
 	
 ; counter prep
-	clr A
-	cpl A
+	mov A, #0xFF
 	mov r1, A
 	
 counter:
@@ -44,20 +42,15 @@ readiness_check:
 	movx A, @DPTR
 	mov 20h, A; send A to bit memory
 	
-	; check if it's supported with A
-	
 	; calculate F
 	mov c, 2
-	; xrl c, 3; c = x2 xor x3, xrl may be not supported with C
-	; xor can be implemented using sum A + B = (A xor B, A and B)
-	; a xor b = (not ab) and (a or b)
 	anl c, 3; c  = x2 * x3
 	mov 4, c; [4] = x2 x3
 	mov c, 2
 	orl c, 3; c = x2 or x3
 	anl c, /4; c = x2 xor x3
 	anl c, 0; c = x0 (x2 xor x3)
-	mov 4, c; or "mov 00, c" if A can be sdrressed bitwise
+	mov 4, c
 	
 	mov c, 1; c = x1
 	anl c, /0; c = x1 & nX0
@@ -72,13 +65,41 @@ readiness_check:
 	orl c, 4
 	mov P4.0, c
 	
-	; TODO: read from ethalon
+	jz indicate_ethalon_zero
 	
+	anl A, #00000111b; clr A.3
+	mov r0, A
+	mov c, 3; check if > 7
+	; ethalon_addr = 8000 + X3
+	; shift [x2x1x0] times
+	
+	mov DPTR, #8000h
+	mov A, #00h
+	addc A, #0
+	mov DPL, A
+	; addc A, #0; A += X3, A = ethalon byte addr
+	; movx DPTR, A
+	movx A, @DPTR
+
+shift_cycle:
+	rr A
+	djnz r0, shift_cycle
+	
+indicate_ethalon:
+	mov 20h, A
+	mov c, 0
+	mov P4.1, c
 	; reset readiness
 	mov DPTR, #7FFBh
 	mov A, #01h; TODO change to 00h
 	movx @DPTR, A
 	
 	ajmp counter
+		
+indicate_ethalon_zero:
+	mov DPTR, #8000h 
+	movx A, @DPTR
+	ajmp indicate_ethalon
+	
 	end
 	
