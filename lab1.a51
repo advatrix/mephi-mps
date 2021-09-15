@@ -1,34 +1,12 @@
 	; 2, 4, 5, 7, 9, 10, 11
 ; TT: 0010 1101 0111 0000 	
 ; F = x1 Nx0 Nx2 V X0(X2 xor X3) v Nx3 x2 Nx1
-	
+	org 8000h
 	P4 equ 0c0h; define P4 = 0c0h
-	
-; load truth table (ethalon)
 
-	mov A, #10110100b; 0 - 7
-	cpl A
-	mov DPTR, #8000h
-	movx @DPTR, A
-	
-	mov A, #00001110b; 8 - 15
-	cpl A
-	mov DPTR, #8001h
-	movx @DPTR, A
-	
 ; indication
 	clr  P4.0
 	setb P4.1
-	
-; counter prep
-	mov A, #0xFF
-	mov r1, A
-	
-counter:
-	inc r1
-	mov DPTR, #7FFAh
-	mov A, r1
-	movx @DPTR, A
 
 continue:
 	mov DPTR, #7FFbh
@@ -44,7 +22,7 @@ readiness_check:
 	
 	; calculate F
 	mov c, 2
-	anl c, 3; c  = x2 * x3
+	anl c, 3; c  = x2 * x3; x2 xor x3 = not(x2x3) and (x2 or x3)
 	mov 4, c; [4] = x2 x3
 	mov c, 2
 	orl c, 3; c = x2 or x3
@@ -91,10 +69,10 @@ indicate_ethalon:
 	mov P4.1, c
 	; reset readiness
 	mov DPTR, #7FFBh
-	mov A, #01h; TODO change to 00h
+	mov A, #00h; TODO change to 00h
 	movx @DPTR, A
 	
-	ajmp counter
+	ajmp continue
 		
 indicate_ethalon_zero:
 	mov DPTR, #8000h 
