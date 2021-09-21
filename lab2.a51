@@ -152,7 +152,7 @@ readiness_check:
 	orl c, 4
 	mov P4.0, c
 	
-	jz indicate_ethalon_zero
+	;jz indicate_ethalon_zero
 	
 	anl A, #00000111b; clr A.3
 	mov r0, A
@@ -168,13 +168,20 @@ readiness_check:
 	; addc A, #0; A += X3, A = ethalon byte addr
 	; movx DPTR, A
 	movx A, @DPTR
-
+	
+	xch A, B
+	
 shift_cycle:
+	mov A, r0
+	jz indicate_ethalon
+	xch A, B
 	rr A
-	djnz r0, shift_cycle
+	xch A, B
+	dec r0
+	jmp shift_cycle
 	
 indicate_ethalon:
-	mov 20h, A
+	mov 20h, B
 	mov c, 0
 	mov P4.1, c
 	
@@ -192,17 +199,20 @@ indicate_ethalon:
 	movx A, @DPTR; A <- (DPTR + X)
 	mul AB; BA = number of cycles
 	; may be it's useless to move A and B to registers???
+	mov r0, A
+	inc B
 	
 timer_cycle_outer:
-	setb TR0; start timer
-timer_start:
-	setb TR0; start timer
-	timer_check:
-		jbc TF0, timer_finish; check if current cycle is done
-		sjmp timer_check
-	timer_finish:
-		clr TR0; reset timer
-		djnz A, timer_start; check if no cycles left
+	; start timer
+	timer_cycle_inner:
+		setb TR0
+		timer_check:
+			jbc TF0, timer_finish
+			sjmp timer_check
+		timer_finish:
+			clr TR0
+			djnz r0, timer_cycle_inner
+		djnz B, timer_cycle_outer
 			
 	; reset readiness
 	mov DPTR, #7FFBh
@@ -210,11 +220,5 @@ timer_start:
 	movx @DPTR, A
 	
 	ajmp counter; TODO change to continue
-		
-indicate_ethalon_zero:
-	mov DPTR, #8000h 
-	movx A, @DPTR
-	ajmp indicate_ethalon
-	
 	end
 	
