@@ -1,18 +1,6 @@
-	; 2, 4, 5, 7, 9, 10, 11
+; 2, 4, 5, 7, 9, 10, 11
 ; TT: 0010 1101 0111 0000 	
 ; F = x1 Nx0 Nx2 V X0(X2 xor X3) v Nx3 x2 Nx1
-
-; 2 sec: 1, 6
-; 3 sec: 3
-; 4 sec: 5, 10
-; 5 sec: 2, 11
-; MODE: T0
-; T0 - 13 bit - 8192
-; f_out = 11.059 MHz
-; f = 11.059 M / 12 = 921583.333 ps; 
-; cycles per sec: 11.059 M / 12 / 8192 = 112.49 cps
-
- 
 	org 8000h
 	P4 equ 0c0h; define P4 = 0c0h
 
