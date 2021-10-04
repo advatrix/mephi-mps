@@ -5,6 +5,28 @@ org 8003h
 jmp int
 
 start:
+
+; load test data
+; A = [0, 55h, F0h, 7Fh]
+; B = [0, B4h, 0, 0]
+	mov DPTR, #8001h
+	mov A, #55h
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0F0h
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0FDh
+	movx @DPTR, A
+	
+	inc DPTR
+	inc DPTR
+	mov A, #0B4h
+	movx @DPTR, A
+
+	mov sp, #80h
 	setb EA; allow interrupts
 	setb EX0; allow INT0
 	clr IT0; 1/0
@@ -30,8 +52,8 @@ arithmetic:
 	mov A, R0
 	rr A
 	rr A; A.0 - A.1 is idx A
-	mov R3, A; R3 <- idx A
 	anl A, #3
+	mov R3, A; R3 <- idx A
 	mov DPTR, #8000h
 	add A, DPL
 	mov DPL, A
@@ -45,10 +67,11 @@ arithmetic:
 	shift_cycle_A:
 		mov A, R4
 		rrc A
+		rr A
 		mov R4, A
 		clr A
-		addc A, R2
-		mov R2, A
+		addc A, R6
+		mov R6, A
 		djnz R5, shift_cycle_A
 ; number of ones in (B.2 + B.4 + B.5 + B.7)
 	mov 20h, R1
@@ -70,21 +93,40 @@ arithmetic:
 	mov R6, A
 	clr A
 ; R6 - first sum
-; number of zeros in bits whose numbers are less than index of A
-; so we assume index of A is number of right shifts of B we do
+; number of zeros in bits whose numbers are more than index of A
+; 1. shift B [idx A + 1] times
+; 	if idx A = 0 then we count B.7 - B.1 => min 1 shift
+; 2. calculate number of shifts of B as (7 - idx A)
+; 3. shift B (7 - idx A) times and count zeros
 ; R7 - second sum
 	mov R7, #0
 	clr c
 	mov A, R3
-	cpl A; count zeros instead of ones
-	jz compare
+	push ACC; stack: (idx A)
+	mov A, R3; acc <- idx A
+	inc A
+	mov R3, A; R3 := (idx A + 1)
+; 1. shift B [idx A + 1] times
 	shift_cycle_B:
 		mov A, R1
-		rrc A
+		rr A
 		mov R1, A
-		addc A, R7
-		mov R7, A
 		djnz R3, shift_cycle_B
+	pop ACC
+	mov R3, A
+	mov A, #7
+	subb A, R3
+	mov R3, A; R3 <- number of B shifts
+	shift_cycle_B_count:
+		mov A, R1
+		cpl A; rotate complemented B to count zeros instead of ones
+		rrc A
+		cpl A
+		mov R1, A; save rotated B
+		clr A
+		addc A, R7; update zeros count
+		mov R7, A; save zeros count
+		djnz R3, shift_cycle_B_count
 compare:
 	; R0 <- min(R6, R7)
 	clr c; clear carry/borrow flag
@@ -114,31 +156,41 @@ logic:
 	pop ACC
 	rr A
 	rr A
-	anl A, #3
+	anl A, #3; take 2 low bits and get addr A
 	mov R1, A
+	
+	; load A
+	mov DPTR, #8000h
+	mov A, R1
+	mov DPL, A
+	movx A, @DPTR; load A
+	mov R0, A
 	
 ; calculate N
 ; addr A mod 2
+	mov A, R1
 	anl A, #1h; A = A mod 2
 	mov B, A
 ; addr B
-	mov R2, A
+	mov A, R2
 	mul AB
-	mov R3, A
 	
+	jz finish
+	
+	mov R3, A; save num of shifts
+	; load A
 	mov A, R0
+	
 	setb c; for input 1
 	
 	logic_shift_cycle:
 		rlc A
 		setb c
-		djnz R3, logic_save_result
+		djnz R3, logic_shift_cycle
 		
-logic_save_result:
 	mov R0, A
-	; jmp finish (unnecessary)
 finish:
-	
-	reti
+	jmp main
+	; reti
 	
 end
