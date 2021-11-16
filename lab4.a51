@@ -1,161 +1,35 @@
-; org 8000h
-P4 equ 0c0h
-IEN0 equ 0A8h
+org 8000h
+P4 			equ 0c0h
+IEN0 		equ 0A8h
+ssi_cmd 	equ 7FFFh
+ssi_data 	equ 7FFEh
+led_cmd_w 	equ 7FF4h
+led_data_w 	equ 7FF5h
+led_cmd_r 	equ 7FF6h
+led_data_r 	equ 7FF7h	
+	
 jmp start
-org 13h; TODO set 8013h
+org 8013h; TODO set 8013h
 jmp int
 
+
+
+
 start:
-
-; load test data
-; A = [0, 55h, F0h, 7Fh]
-; B = [0, B4h, 0, 0]
-	mov DPTR, #8001h
-	mov A, #55h
-	movx @DPTR, A
-	
-	inc DPTR
-	mov A, #0F0h
-	movx @DPTR, A
-	
-	inc DPTR
-	mov A, #0FDh
-	movx @DPTR, A
-	
-	inc DPTR
-	inc DPTR
-	mov A, #0B4h
-	movx @DPTR, A
-	
-	; запись кодов ССИ (по адресу 8008h)
-	; 0
-	inc DPTR; по адре
-	mov A, #0F3h
-	movx @DPTR, A
-	
-	; TODO заполнить таблицу кодов до F
-	
-	; запись кодов ЖКИ (по адресу 8008h + 10h = 8018h)
-	; 0
-	inc DPTR
-	mov A, #30h; возможно надо менять местами полубайты
-	movx @DPTR, A
-	
-	; 1
-	inc DPTR
-	mov A, #31h
-	movx @DPTR, A
-
-	mov sp, #80h
-	setb EA; allow interrupts
-	setb EX0; allow INT0
-	clr IT0; 1/0
-	
+	; lcall load_memory ; загрузка данных в память (удалить)
+	; mov sp, #80h 
+	; setb EA; allow interrupts
+	; setb EX0; allow INT0
+	; clr IT0; 1/0
 	mov IEN0, #84h ; allow INT1
 	
-	mov DPTR, #7FFFh
-	mov A, #01h
-	movx @DPTR, A; ввод символа слева, декодированный режим
-	; установка режима дисплея ССИ
-	
-	; разрешение записи в видеопамять с автоинкрементированием
-	; адреса
-	
-	mov DPTR, #7FFFh
-	mov A, #90h
-	; 90h = 100 10 000
-	; запись в видеопамять, 8разр/8сим, кодир. сканирование
-	movx @DPTR, A
-	
-	; настройка дисплея
-	; две строки, размер символа 5 * 8
-	mov A, #38h
-	lcall dinit
-	
-	; включение дисплея
-	mov A, #0Ch
-	lcall dinit
-	
-	; включение сдвига курсора вправо
-	mov A, #06h
-	lcall dinit
-	
-	; сброс счетчика адреса и сдвига экрана
-	mov A, #02h
-	lcall dinit
-	
-	; очистка экрана
-	mov A, #01h
-	lcall dinit
+	lcall init_ssi
+	lcall init_led
 	
 main:
 	mov A, R0
 	swap A
-	mov P4, A; в P4 little endian
-	; mov P4, R0
-	
-	
-	; запись в видеопамять
-	; старшая тетрада в HEX формате в 3 знакоместо ССИ
-	
-	; весь байт R0 в 13 место 2 строки дисплея в HEX формате
-	
-	
-	; команда записи в видеопамять в третье знакоместо
-	mov A, #83h
-	mov DPTR, #7FFFh
-	movx @DPTR, A
-	
-	; получение кода символа для ССИ в зависимости от значения тетрады
-	mov A, R0
-	anl A, #0Fh
-	add A, #08h
-	mov DPH, #80h
-	mov DPL, A
-	movx A, @DPTR
-	
-	; отображение символа в ССИ (передача данных)
-	mov DPTR, #7FFEh
-	movx @DPTR, A
-	
-	; получение кода символа для ЖКИ
-	; старшая тетрада
-	mov A, R0
-	anl A, #0F0h
-	swap A
-	add A, #18h
-	mov DPH, #80h
-	mov DPL, A
-	movx A, @DPTR
-	mov R1, A
-	
-	mov A, R0
-	anl A, #0F0h
-	add A, #18h
-	mov DPL, A
-	movx A, @DPTR
-	mov R2, A
-	
-	; R1, R2 - коды (адреса) символов для индикации
-	
-	; установка счётчика на начальный адрес
-	; mov A, #81h; это будет 1, но нужен другой (надо посчитать какой)
-	; 13 знакоместо 2 строки => 28h + Dh = 35h = 53d
-	; команда 
-	; 1 0110101
-	mov A, #10110101b
-	lcall dinit
-	
-	; вывод первого символа
-	mov A, R1
-	lcall display
-	
-	mov A, #00011100b; сдвиг курсора вправо
-	lcall dinit
-	
-	; вывод второго символа
-	mov A, R2
-	lcall display  
+	mov P4, A
 	
 	sjmp main
 	
@@ -163,6 +37,7 @@ int:
 	; read input
 	mov DPTR, #7ffAh
 	movx A, @DPTR
+	mov R1, A
 	; read opcode from keyboard
 	; arithmetic - key '8'
 	; logic - key '4'
@@ -180,12 +55,12 @@ int:
 	mov DPTR, #7FFEh
 	movx A, @DPTR
 	
-	; проверка скан-кода клавиши '4'
+	; проверка скан-кода клавиши '4' (C8h)
 	cjne A, #11001000b, arithmetic_check
 	jmp logic
 
 arithmetic_check:
-	; проверка скан-кода клавиши '8'
+	; проверка скан-кода клавиши '8' (D1h)
 	cjne A, #11010001b, finish_local
 	jmp arithmetic
 	
@@ -194,6 +69,7 @@ finish_local:
 	
 arithmetic:
 	; read addr B
+	mov A, R1
 	rr A; A.0-A.1 is idx B
 	mov R0, A; R0 - work reg
 	mov DPTR, #8004h
@@ -301,7 +177,7 @@ logic:
 	; load addr A and addr B to R1 and R2 respectively
 	; calculate N and store it in R3
 	; shift R0 R3 times
-	
+	mov A, R1
 	rr A; A.0-A.1 is addr B
 	push ACC
 	anl A, #3; take 2 low bits and get addr B
@@ -343,7 +219,117 @@ logic:
 		
 	mov R0, A
 finish:
+	lcall display_ssi
+	lcall display_led
+
 	reti
+	
+init_led:
+; настройка дисплея
+	; две строки, размер символа 5 * 8
+	mov A, #38h
+	lcall dinit
+	
+	; включение дисплея
+	mov A, #0Ch
+	lcall dinit
+	
+	; включение сдвига курсора вправо
+	;mov A, #06h
+	;lcall dinit
+	
+	; сброс счетчика адреса и сдвига экрана
+	mov A, #02h
+	lcall dinit
+	
+	; очистка экрана
+	mov A, #01h
+	lcall dinit
+	ret
+	
+init_ssi:
+	mov DPTR, #ssi_cmd
+	mov A, #01h; ввод символа слева
+	movx @DPTR, A
+	
+	mov DPTR, #ssi_cmd
+	mov A, #90h; запись с автоинкрементом адреса
+	movx @DPTR, A
+	
+	mov DPTR, #ssi_data
+	mov A, #00h; сброс всех ячеек видеопамяти
+	movx @DPTR, A	
+	movx @DPTR, A	
+	movx @DPTR, A	
+	movx @DPTR, A
+	
+	ret
+	
+display_ssi:
+; процедура вывода старшей тетрады R0 в ССИ
+	
+	; запись в третье знакоместо
+	mov DPTR, #ssi_cmd
+	mov A, #82h
+	movx @DPTR, A
+		
+	; получить данные
+	mov A, R0
+	swap A
+	anl A, #0Fh
+	add A, #08h
+	mov DPH, #80h
+	mov DPL, A
+	movx A, @DPTR
+	
+	; запись в видеопамять
+	mov DPTR, #ssi_data
+	movx @DPTR, A
+	
+	ret
+	
+display_led:
+; процедура вывода данных на дисплей
+; данные - в R0
+; вывод во вторую строку, 13 и 14 знакоместа
+; адрес начала ввода - 34h
+	
+	; получение кодов символов
+	; старшая тетрада
+	
+	mov A, R0
+	swap A
+	anl A, #0Fh
+	add A, #18h
+	mov DPH, #80h
+	mov DPL, A
+	movx A, @DPTR
+	mov R1, A
+	
+	; младшая тетрада
+	mov A, R0
+	anl A, #0Fh
+	add A, #18h
+	mov DPH, #80h
+	mov DPL, A
+	movx A, @DPTR
+	mov R2, A
+	
+	; команда 1 - установка счетчика
+	;		   0110100 = 34h = 52d
+	mov A, #10110100b
+	lcall dinit
+	
+	mov A, R1
+	lcall display
+	
+	;mov A, #00011100b
+	mov A, #10110101b
+	lcall dinit
+	
+	mov A, R2
+	lcall display
+	ret
 	
 dinit:
 ; процедура записи команды в управляющий регистр дисплея
@@ -373,6 +359,172 @@ display:
 	mov DPTR, #7FF5h
 	mov A, R3
 	movx @DPTR, A
+	ret
+	
+load_memory:
+; процедура загрузки тестовых данных в память
+	; load test data
+; A = [0, 55h, F0h, 7Fh]
+; B = [0, B4h, 0, 0]
+
+	mov DPTR, #8001h
+	mov A, #55h
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0F0h
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0FDh
+	movx @DPTR, A
+	
+	inc DPTR
+	inc DPTR
+	mov A, #0B4h
+	movx @DPTR, A
+	
+	inc DPTR
+	inc DPTR
+	
+	; загрузка кодов ССИ
+	; базовый адрес кодов ССИ: 8008h
+	; код 0
+	inc DPTR
+	mov A, #0F3h
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #60h; 1
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0B5h; 2
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0F4h; 3
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #66; 4
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0D6h; 5
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0D7h; 6
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #70h; 7
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0F7h; 8
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0F6h; 9
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #77h; A
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0C7h; B
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #93h; C
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #0E5h; D
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #97h; E
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #17h; F
+	movx @DPTR, A
+	
+	; загрузка кодов ЖКИ
+	; базовый адрес ЖКИ: 8008h + 10h = 8018h
+	
+	inc DPTR
+	mov A, #30h; 0
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #31h; 1
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #32h; 2
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #33h; 3
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #34h; 4
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #35h; 5
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #36h; 6
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #37h; 7
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #38h; 8
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #39h; 9
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #41h; A
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #42h; B
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #43h; C
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #44h; D
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #45h; E
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #46h; F
+	movx @DPTR, A
+	
+	inc DPTR
+	mov A, #47h; F
+	movx @DPTR, A
+	
 	ret
 
 end

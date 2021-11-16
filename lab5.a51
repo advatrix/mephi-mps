@@ -90,7 +90,7 @@ transition_2_3:
 	jnc t23_load; A := max(0, 3 - 2 * N1)
 		clr A
 	t23_load:
-		mov A, R7
+		mov R7, A
 	jmp read_cycle
 	
 state_3:
